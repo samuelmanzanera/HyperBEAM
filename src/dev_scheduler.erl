@@ -349,7 +349,21 @@ find_server(ProcID, Msg1, ToSched, Opts) ->
     case get_hint(ProcID, Opts) of
         {ok, Hint} ->
             ?event({found_hint_in_proc_id, Hint}),
-            generate_redirect(ProcID, Hint, Opts);
+            % Check if the hint points to the local node
+            LocalAddress = hb_util:get_local_address(Opts),
+
+            % If the hint points to the local node, continue with local processing
+            % using the ProcID without hint
+            case hb_util:compare_address(LocalAddress, Hint) of
+                true ->
+                    ?event({hint_points_to_local_node, {hint, Hint}, {local, LocalAddress}}),
+                    % Continue with local processing using the ProcID without hint
+                    CleanProcID = without_hint(ProcID),
+                    find_server(CleanProcID, Msg1, ToSched, Opts#{ scheduler_follow_hints => false });
+                false ->
+                    % Generate redirect to the remote node
+                    generate_redirect(ProcID, Hint, Opts)
+            end;
         not_found ->
             ?event({no_hint_in_proc_id, ProcID}),
             case dev_scheduler_registry:find(ProcID, false, Opts) of
