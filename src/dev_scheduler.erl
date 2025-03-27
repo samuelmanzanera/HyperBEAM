@@ -482,7 +482,7 @@ without_hint(Target) when ?IS_ID(Target) ->
     hb_util:human_id(Target);
 without_hint(Target) ->
     case binary:split(Target, [<<"?">>, <<"&">>], [global]) of
-        [ProcID] when ?IS_ID(ProcID) -> hb_util:human_id(ProcID);
+        [ProcID | _] when ?IS_ID(ProcID) -> hb_util:human_id(ProcID);
         _ -> throw({invalid_operation_target, Target})
     end.
 
