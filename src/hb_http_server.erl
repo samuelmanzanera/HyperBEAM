@@ -416,6 +416,8 @@ set_opts(Request, Opts) ->
     },
     {set_opts(FinalOpts), FinalOpts}.
 
+get_opts(NodeMsg = #{ http_server := no_server_ref }) ->
+    NodeMsg;
 get_opts(NodeMsg) ->
     ServerRef = hb_opts:get(http_server, no_server_ref, NodeMsg),
     cowboy:get_env(ServerRef, node_msg, no_node_msg).

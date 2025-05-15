@@ -8,7 +8,7 @@
 
 %% @doc Exported function for getting device info.
 info(_) -> 
-	#{ exports => [info, once, every, stop, add, load, normalize] }.
+	#{ exports => [info, once, every, stop, add, list, normalize] }.
 
 %% @doc Exported function for granting a description of the device.
 info(_Msg1, _Msg2, _Opts) ->
@@ -199,7 +199,7 @@ once(_Msg1, Msg2, Opts) ->
 					{ok, ReqMsgID};
 				undefined ->
 					% Process not found, spawn and register
-					Pid = spawn(fun() -> once_worker(CronPath, ModifiedMsg2, Opts) end),
+                    Pid = spawn(fun() -> once_worker(CronPath, ModifiedMsg2, Opts) end),
 					hb_name:register(Name, Pid),
 					% Define the data structure for the cache
 					MinimalAugmentedData = #{ 
@@ -654,7 +654,7 @@ every_worker_loop_test() ->
 
 %% @doc Test that verifies a one-time job is added to 
 %% the cron cache and can be loaded via the load endpoint
-once_cron_cache_load_test() ->
+once_cron_cache_list_test() ->
     Opts = generate_test_opts(),
     % Start a new node with test options
     Node = hb_http_server:start_node(Opts),
@@ -675,7 +675,7 @@ once_cron_cache_load_test() ->
     % % Use the load function to retrieve cron jobs
 	{ok, LoadedCrons} = hb_ao:resolve_many(
         hb_singleton:from(#{
-            <<"path">> => <<"/~cron@1.0/load">>
+            <<"path">> => <<"/~cron@1.0/list">>
         }),
         Opts
     ),
@@ -689,7 +689,7 @@ once_cron_cache_load_test() ->
 
 %% @doc Test that verifies a recurring job is added to
 %% the cron cache and can be loaded via cache_list.
-every_cron_cache_load_test() ->
+every_cron_cache_list_test() ->
     Opts = generate_test_opts(),
     % Start a new node with test options
     Node = hb_http_server:start_node(Opts),
@@ -707,7 +707,7 @@ every_cron_cache_load_test() ->
     timer:sleep(100), % Short sleep just to ensure cache_put completes
     % Use the cache list function to retrieve cron jobs
     {ok, Crons} = cache_list(Opts),
-    ?event({every_cron_cache_load_test_crons, {crons, Crons}}),
+    ?event({every_cron_cache_list_test_crons, {crons, Crons}}),
     % Verify the task is in the loaded list
     ?assertMatch({ok, _}, find_job_by_task_id(Crons, ReqMsgId)),
     ?event({'every_load_test_done'}).
@@ -723,7 +723,7 @@ cron_device_load_test() ->
 	TaskId2 = <<"load-test-task-id-2">>,
 	TestData2 = #{<<"key">> => <<"value-2">>, <<"timestamp">> => os:system_time(millisecond)},
 	{ok, _PutResult2} = cache_put(TaskId2, TestData2, Opts),
-	UrlPath = <<"/~cron@1.0/load">>,
+	UrlPath = <<"/~cron@1.0/list">>,
 	{ok, LoadedCrons} = hb_http:get(Node, UrlPath, #{}),
 	CronsList = hb_ao:get(<<"crons">>, LoadedCrons, #{}),
 	{ok, RetrievedData} = find_job_by_task_id(CronsList, TaskId),
@@ -740,7 +740,12 @@ test_worker() -> test_worker(#{count => 0}).
 test_worker(State) ->
 	receive
 		{increment} ->
-			NewCount = maps:get(count, State, 0) + 1,
+            % ensure that count is defined in the case that a full message
+            % is already in the state.
+			NewCount = case maps:get(count, State, undefined) of
+                undefined -> 1;
+                N         -> N + 1
+            end,
 			?event({'test_worker:incremented', {new_count, NewCount}}),
 			test_worker(State#{count := NewCount});
 		{update, NewState} ->
@@ -958,7 +963,7 @@ start_hook_normalize_test() ->
 	% ?event({start_hook_normalize_test, hook_node_opts, HookNodeOpts}),
 	HookNode = hb_http_server:start_node(HookNodeOpts),
 	% ?event({start_hook_normalize_test, hook_node_started, HookNode}),
-	timer:sleep(100),
+	timer:sleep(200),
 	% check the cron cache list
 	{ok, Crons} = cache_list(HookNodeOpts),
 	% verify we can find the once job in the crons list after node start
