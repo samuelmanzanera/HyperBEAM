@@ -185,9 +185,7 @@ event([Group, Event], ExecState, Opts) ->
     ?event(Group, Event),
     {[<<"ok">>], ExecState}.
 
-%% ===================================================================
 %% Lua Cache Functions Wrappers
-%% ===================================================================
 
 %% @doc Wrapper for hb_cache:write/2 (structured message version).
 %% Expects Lua call: ao.cache_write(message_map, opts?)

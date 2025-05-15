@@ -218,21 +218,24 @@ once(_Msg1, Msg2, Opts) ->
 
 %% @doc Internal function for scheduling a one-time message.
 once_worker(Path, Req, Opts) ->
-	% Directly call the meta device on the newly constructed 'singleton', just
+    % Directly call the meta device on the newly constructed 'singleton', just
     % as hb_http_server does.
     TracePID = hb_tracer:start_trace(),
-	try
-		dev_meta:handle(Opts#{ trace => TracePID }, Req#{ <<"path">> => Path})
-	catch
-		Class:Reason:Stacktrace ->
-			?event(
-                {cron_every_worker_error,
+    try
+        dev_meta:handle(Opts#{ trace => TracePID }, Req#{ <<"path">> => Path})
+    catch
+        %% Cowboy / Ranch listener is gone (node stopped) – exit quietly
+        error:badarg ->
+            exit(normal);
+        Class:Reason:Stacktrace ->
+            ?event(
+                {cron_once_worker_error,
                     {path, Path},
                     {error, Class, Reason, Stacktrace}
                 }
             ),
-			throw({error, Class, Reason, Stacktrace})
-	end.
+            exit({Class, Reason, Stacktrace})
+    end.
 
 
 %% @doc Exported function for scheduling a recurring message.
@@ -312,6 +315,8 @@ every_worker_loop(CronPath, Req, Opts, IntervalMillis) ->
 		Result = dev_meta:handle(Opts, ReqSingleton),
 		?event({cron_every_worker_executed, {path, CronPath}, {result, Result}})
 	catch
+        error:badarg ->
+            exit(normal);
 		Class:Reason:Stacktrace ->
 			?event(
                 {cron_every_worker_error,
@@ -744,18 +749,22 @@ test_worker(State) ->
 		{increment} ->
             % ensure that count is defined in the case that a full message
             % is already in the state.
-			NewCount = case maps:get(count, State, undefined) of
-                undefined -> 1;
-                N         -> N + 1
+			Current = case State of
+                #{count := N} -> N;
+                _             -> 0
             end,
+            NewCount = Current + 1,
 			?event({'test_worker:incremented', {new_count, NewCount}}),
-			test_worker(State#{count := NewCount});
+			NewState = maps:put(count, NewCount, State),
+			test_worker(NewState);
 		{update, NewState} ->
 			 ?event({'test_worker:updated', {new_state, NewState}}),
 			 test_worker(NewState);
 		{get, Pid} ->
 			Pid ! {state, State},
-			test_worker(State)
+			test_worker(State);
+        _Other ->
+            test_worker(State)
 	end.
 
 
