@@ -416,6 +416,13 @@ set_opts(Request, Opts) ->
     },
     {set_opts(FinalOpts), FinalOpts}.
 
+
+%% hb_http_server/start_node/1 executes a start hook before cowboy is 
+%% listening. This means there is no valid http_server ref in node_opts.
+%% When we run dev_cron/normalize as part of a start hook, it spawns
+%% workers using the original NodeMsg, which does not contain a valid
+%% http_server ref. This can crash the cowboy:get_env. To solve for this,
+%% we return the original NodeMsg when no Cowboy listener is attached.
 get_opts(NodeMsg = #{ http_server := no_server_ref }) ->
     NodeMsg;
 get_opts(NodeMsg) ->
