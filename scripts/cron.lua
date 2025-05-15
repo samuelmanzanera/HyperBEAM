@@ -45,19 +45,21 @@ local handle_remove_command = function(process, cmd_body)
     local task_id_to_remove = cmd_body.task_id
     ao.event("debug_cron", { "removing task", task_id_to_remove, "crons_count_before", #process.crons })
 
-    local removed = false
-    for i = #process.crons, 1, -1 do
-        local job = process.crons[i] 
-        if job and job.task_id == task_id_to_remove then 
-            table.remove(process.crons, i)
-            ao.event("debug_cron", { "removed task", task_id_to_remove, "crons_count_after", #process.crons })
-            removed = true
-            break 
+    -- Find the index of the task to remove.
+    local idx_to_remove = nil
+    for i, job in ipairs(process.crons) do
+        if job.task_id == task_id_to_remove then
+            idx_to_remove = i
+            break
         end
     end
-
-    if not removed then
-         ao.event("debug_cron", { "warn", "Task not found for removal", task_id = task_id_to_remove })
+    
+    -- If an index is found, remove the task. Otherwise, log a warning.
+    if idx_to_remove then
+        table.remove(process.crons, idx_to_remove)
+        ao.event("debug_cron", { "removed task", task_id_to_remove, "crons_count_after", #process.crons })
+    else
+        ao.event("debug_cron", { "warn", "Task not found for removal", task_id = task_id_to_remove })
     end
 
     return process
