@@ -1,54 +1,37 @@
-local handle_put_command
-local handle_remove_command
-local handle_clear_command
-
--- Helper functions for validation
-local validate_initial_message = function(message)
-    if not message or not message.body or not message.body.body then
-        return false, { "error", "Initial message structure invalid", raw_message_body = message.body }
-    end
-
-    return true
-end
-
-local validate_command_body = function(cmd_body)
-    if not cmd_body.path or type(cmd_body.path) ~= "string" then
-        return false, { "error", "Command body missing or invalid path", received_body = cmd_body }
-    end
-
-    return true
-end
-
 -- Command handlers
-local handle_put_command = function(process, cmd_body)
-    if not cmd_body.task_id or type(cmd_body.task_id) ~= "string" then
-        ao.event("debug_cron", { "error", "Invalid put: missing/invalid task_id", command_body = cmd_body })
+local handle_put_command = function(process, message)
+    -- Validate the task_id for put
+    if not message.body.body.task_id or type(message.body.body.task_id) ~= "string" then
+        ao.event("debug_cron", { "error", "Invalid put: missing/invalid task_id", command_body = message.body.body })
         return process
     end
 
-    if not cmd_body.data or type(cmd_body.data) ~= "table" then
-        ao.event("debug_cron", { "error", "Invalid put: missing/invalid data", command_body = cmd_body })
+    if not message.body.body.data or type(message.body.body.data) ~= "table" then
+        ao.event("debug_cron", { "error", "Invalid put: missing/invalid data", command_body = message.body.body })
         return process
     end
 
-    ao.event("debug_cron", { "adding task", cmd_body.task_id })
-    table.insert(process.crons, cmd_body) 
+    ao.event("debug_cron", { "adding task", message.body.body.task_id })
+    table.insert(process.crons, message.body)
     return process
 end
 
-local handle_remove_command = function(process, cmd_body)
-    if not cmd_body.task_id or type(cmd_body.task_id) ~= "string" then
-        ao.event("debug_cron", { "error", "Invalid remove: missing/invalid task_id", command_body = cmd_body })
+local handle_remove_command = function(process, message)
+    -- Validate the task_id for remove
+    if not message.body.body.task_id or type(message.body.body.task_id) ~= "string" then
+        ao.event("debug_cron", { "error", "Invalid remove: missing/invalid task_id", command_body = message.body.body })
         return process
     end
 
-    local task_id_to_remove = cmd_body.task_id
+    local task_id_to_remove = message.body.body.task_id
     ao.event("debug_cron", { "removing task", task_id_to_remove, "crons_count_before", #process.crons })
 
     -- Find the index of the task to remove.
     local idx_to_remove = nil
+    -- process.crons is a list of maps, each with a "body" key
+    -- the task_id is stored in the "body" map
     for i, job in ipairs(process.crons) do
-        if job.task_id == task_id_to_remove then
+        if job.body and job.body.task_id == task_id_to_remove then
             idx_to_remove = i
             break
         end
@@ -67,42 +50,43 @@ end
 
 local handle_clear_command = function(process)
     ao.event("debug_cron", { "clearing all tasks" })
-    process.crons = nil 
-    collectgarbage() 
     process.crons = {}
+    collectgarbage()
+    ao.event("debug_cron", { "cleared all tasks" })
     return process
 end
 
 function compute(process, message, opts)
     -- Early return when no body is provided
     -- This handles the initial invocation during process setup
-    -- Validation of the initial message
-    local is_valid, validation_error_details = validate_initial_message(message)
-    if not is_valid then
-        ao.event("debug_cron", validation_error_details)
+    if not message or not message.body or not message.body.body then
+        return process
+    end
+    
+    -- Validate that the path exists
+    if not message.body.body.path or type(message.body.body.path) ~= "string" then
+        ao.event("debug_cron", { "error", "Invalid path", command_body = message.body.body })
         return process
     end
 
-    local cmd_body = message.body.body
-    is_valid, validation_error_details = validate_command_body(cmd_body)
-    if not is_valid then
-        ao.event("debug_cron", validation_error_details)
-        return process
-    end
-
-    local command = cmd_body.path
+    ao.event("debug_cron", { "compute incoming", message })
+    
+    -- Supported commands: "put" | "remove" | "clear"
+    local command = message.body.body.path
     ao.event("debug_cron", { "compute command", command })
-    -- Initialize crons table if it doesn't exist
+    
+    -- Initialize the crons table if it doesn't exist
     process.crons = process.crons or {}
-    -- Command processing
+    
+    -- Command dispatch
     if command == "put" then
-        return handle_put_command(process, cmd_body)     
+        return handle_put_command(process, message)
     elseif command == "remove" then
-        return handle_remove_command(process, cmd_body)
+        return handle_remove_command(process, message)
     elseif command == "clear" then
         return handle_clear_command(process)
     else
-        ao.event("debug_cron", { "error", "Unknown command received", command = command, command_body = cmd_body })
-        return process 
+        ao.event("debug_cron", { "error", "Unknown command received", command = command, command_body = message.body.body })
+        return process
     end
 end

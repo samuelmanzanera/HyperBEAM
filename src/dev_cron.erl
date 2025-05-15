@@ -429,7 +429,7 @@ cache_remove(TaskId, Opts) ->
 {ok, removed}.
 
 cache_list(Opts) ->
-	?event({cache_list_OG_start}),
+	?event({cache_list_start}),
 	SampleMsg = [
 		#{ <<"device">> => <<"node-process@1.0">> },
 		<<"cron">>,
@@ -684,7 +684,9 @@ once_cron_cache_list_test() ->
     CronsList = hb_ao:get(<<"crons">>, LoadedCrons, #{}),
     ?event({once_load_test_extracted, {crons_list, CronsList}}),
     % Verify the task is in the loaded list
-    ?assertMatch({ok, _}, find_job_by_task_id(CronsList, ReqMsgId)),
+    Res = find_job_by_task_id(CronsList, ReqMsgId),
+    ?event({once_load_test_job, {res, Res}}),
+    ?assertMatch({ok, _}, Res),
     ?event({'once_load_test_done'}).
 
 %% @doc Test that verifies a recurring job is added to
@@ -713,7 +715,7 @@ every_cron_cache_list_test() ->
     ?event({'every_load_test_done'}).
 
 cron_device_load_test() ->
-	% this test checks whether the cron load function returns 
+	% This test checks whether the cron load function returns 
 	% the correct data
 	Opts = generate_test_opts(),
 	Node = hb_http_server:start_node(Opts),
