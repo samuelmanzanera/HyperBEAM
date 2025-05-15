@@ -80,11 +80,29 @@ function compute(process, message, opts)
     
     -- Command dispatch
     if command == "put" then
-        return handle_put_command(process, message)
+        local ok, new_process_or_err = pcall(handle_put_command, process, message)
+        if not ok then
+            ao.event("debug_cron",
+                     { "error", "Error handling put command", error = new_process_or_err })
+            return process
+        end
+        return new_process_or_err
     elseif command == "remove" then
-        return handle_remove_command(process, message)
+        local ok, new_process_or_err = pcall(handle_remove_command, process, message)
+        if not ok then
+            ao.event("debug_cron",
+                     { "error", "Error handling remove command", error = new_process_or_err })
+            return process
+        end
+        return new_process_or_err
     elseif command == "clear" then
-        return handle_clear_command(process)
+        local ok, new_process_or_err = pcall(handle_clear_command, process)
+        if not ok then
+            ao.event("debug_cron",
+                     { "error", "Error handling clear command", error = new_process_or_err })
+            return process
+        end
+        return new_process_or_err
     else
         ao.event("debug_cron", { "error", "Unknown command received", command = command, command_body = message.body.body })
         return process
