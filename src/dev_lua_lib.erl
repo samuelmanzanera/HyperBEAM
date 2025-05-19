@@ -15,7 +15,10 @@
 %%% Library functions. Each exported function is _automatically_ added to the
 %%% Lua environment, except for the `install/3' function, which is used to
 %%% install the library in the first place.
--export([resolve/3, set/3, event/3, install/3, cache_write/3, cache_read/3]).
+-export([resolve/3, set/3, event/3, install/3]).
+-ifdef(ENABLE_LUA_CACHE).
+-export([cache_write/3, cache_read/3]).
+-endif.
 -include("include/hb.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -185,6 +188,9 @@ event([Group, Event], ExecState, Opts) ->
     ?event(Group, Event),
     {[<<"ok">>], ExecState}.
 
+
+-ifdef(ENABLE_LUA_CACHE). 
+
 %% Lua Cache Functions Wrappers
 
 %% @doc Wrapper for hb_cache:write/2 (structured message version).
@@ -281,3 +287,5 @@ lua_ao_cache_write_read_test() ->
 	?assertEqual(<<"ok">>, Status),
 	?assertEqual(TestMap, maps:remove(<<"priv">>, RetrievedValueMap)),
     ok.
+
+-endif.
