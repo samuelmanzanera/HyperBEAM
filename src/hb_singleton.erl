@@ -32,7 +32,7 @@
 %%%         - N.Key+res=(/a/b/c) => #{ Key => (resolve /a/b/c), ... }
 %%% </pre>
 -module(hb_singleton).
--export([from/2, to/1]).
+-export([from/1, from/2, to/1]).
 -include("include/hb.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -define(MAX_SEGMENT_LENGTH, 512).
@@ -101,7 +101,6 @@ to(Messages) ->
             end,
             {#{}, 0, #{}},
             Messages),
-
     MessageWithTypeAndScopes =
         hb_maps:fold(
             fun
@@ -135,10 +134,12 @@ type(_Value) -> unknown.
 
 %% @doc Normalize a singleton TABM message into a list of executable AO-Core
 %% messages.
+from(Path) when is_binary(Path) ->
+    from(#{ <<"path">> => Path }, #{}).
 from(RawMsg, Opts) ->
     RawPath = hb_maps:get(<<"path">>, RawMsg, <<>>),
     ?event(parsing, {raw_path, RawPath}),
-    {ok, Path, Query} = parse_full_path(RawPath),
+    {ok, Path, Query} = parse_full_path(RawPath, Opts),
     ?event(parsing, {parsed_path, Path, Query}),
     MsgWithoutBasePath = hb_maps:merge(
         hb_maps:remove(<<"path">>, RawMsg),
@@ -161,19 +162,17 @@ from(RawMsg, Opts) ->
     Result.
 
 %% @doc Parse the relative reference into path, query, and fragment.
-parse_full_path(RelativeRef) ->
-    %?event(parsing, {raw_relative_ref, RawRelativeRef}),
-    %RelativeRef = hb_escape:decode(RawRelativeRef),
-    ?event(parsing, {parsed_relative_ref, RelativeRef}),
-    {Path, QKVList} =
-        case binary:split(RelativeRef, <<"?">>) of
-            [P, QStr] -> {P, cowboy_req:parse_qs(#{ qs => QStr })};
-            [P] -> {P, []}
+parse_full_path(RelativeRef, Opts) ->
+    {Path, QueryMap} =
+        case part([$?], RelativeRef) of
+            {$?, Base, Query} ->
+                {Base, parse_inlined_keys(Query, #{}, Opts)};
+            {no_match, Base, <<>>} -> {Base, #{}}
         end,
     {
         ok,
         lists:map(fun(Part) -> decode_string(Part) end, path_parts($/, Path)),
-        hb_maps:from_list(QKVList)
+        QueryMap
     }.
 
 %% @doc Step 2: Decode, split and sanitize the path. Split by `/' but avoid
@@ -186,6 +185,7 @@ path_messages(RawBin, Opts) when is_binary(RawBin) ->
 normalize_base([]) -> [];
 normalize_base([First|Rest]) when ?IS_ID(First) -> [First|Rest];
 normalize_base([{as, DevID, First}|Rest]) -> [{as, DevID, First}|Rest];
+normalize_base([Subres = {resolve, _}|Rest]) -> [Subres|Rest];
 normalize_base(Rest) -> [#{}|Rest].
 
 %% @doc Split the path into segments, filtering out empty segments and
@@ -279,28 +279,28 @@ parse_scope(KeyBin) ->
 
 %% @doc Step 5: Merge the base message with the scoped messages.
 build_messages(Msgs, ScopedModifications, Opts) ->
-    do_build(1, Msgs, ScopedModifications, Opts).
+    build(1, Msgs, ScopedModifications, Opts).
 
-do_build(_, [], _ScopedKeys, _Opts) -> [];
-do_build(I, [{as, DevID, Msg = #{ <<"path">> := <<"">> }}|Rest], ScopedKeys, Opts) ->
+build(_, [], _ScopedKeys, _Opts) -> [];
+build(I, [{as, DevID, Msg = #{ <<"path">> := <<"">> }}|Rest], ScopedKeys, Opts) ->
     ScopedKey = lists:nth(I, ScopedKeys),
     StepMsg = hb_message:convert(
         Merged = hb_maps:merge(Msg, ScopedKey),
         <<"structured@1.0">>,
-		Opts#{ topic => ao_internal }
+        Opts#{ topic => ao_internal }
     ),
     ?event({merged, {dev, DevID}, {input, Msg}, {merged, Merged}, {output, StepMsg}}),
-    [{as, DevID, StepMsg} | do_build(I + 1, Rest, ScopedKeys, Opts)];
-do_build(I, [Msg|Rest], ScopedKeys, Opts) when not is_map(Msg) ->
-    [Msg | do_build(I + 1, Rest, ScopedKeys, Opts)];
-do_build(I, [Msg | Rest], ScopedKeys, Opts) ->
+    [{as, DevID, StepMsg} | build(I + 1, Rest, ScopedKeys, Opts)];
+build(I, [Msg|Rest], ScopedKeys, Opts) when not is_map(Msg) ->
+    [Msg | build(I + 1, Rest, ScopedKeys, Opts)];
+build(I, [Msg | Rest], ScopedKeys, Opts) ->
     ScopedKey = lists:nth(I, ScopedKeys),
     StepMsg = hb_message:convert(
         hb_maps:merge(Msg, ScopedKey),
         <<"structured@1.0">>,
         Opts#{ topic => ao_internal }
     ),
-    [StepMsg | do_build(I + 1, Rest, ScopedKeys, Opts)].
+    [StepMsg | build(I + 1, Rest, ScopedKeys, Opts)].
 
 %% @doc Parse a path part into a message or an ID.
 %% Applies the syntax rules outlined in the module doc, in the following order:
@@ -338,6 +338,11 @@ parse_part_mods(<<"~", PartMods/binary>>, Msg, Opts) ->
     % Apply the device specifier
     {as, maybe_subpath(DeviceBin, Opts), MsgWithInlines};
 parse_part_mods(<< "&", InlinedMsgBin/binary >>, Msg, Opts) ->
+    parse_inlined_keys(InlinedMsgBin, Msg, Opts).
+
+%% @doc Parse inlined key-value pairs from a path segment. Each key-value pair
+%% is separated by `&' and is of the form `K=V'.
+parse_inlined_keys(InlinedMsgBin, Msg, Opts) ->
     InlinedKeys = path_parts($&, InlinedMsgBin),
     MsgWithInlined =
         lists:foldl(

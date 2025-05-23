@@ -569,14 +569,15 @@ lua_http_preprocessor_test() ->
     {ok, Script} = file:read_file("test/test.lua"),
     Node = hb_http_server:start_node(
         #{
-            preprocessor =>
-                #{
+            on => #{
+                <<"request">> => #{
                     <<"device">> => <<"lua@5.3a">>,
                     <<"script">> => #{
                         <<"content-type">> => <<"application/lua">>,
                         <<"body">> => Script
                     }
                 }
+            }
         }),
     {ok, Res} = hb_http:get(Node, <<"/hello?hello=world">>, #{}),
     ?assertMatch(#{ <<"body">> := <<"i like turtles">> }, Res).

@@ -135,12 +135,18 @@ message_to_json_struct(RawMsg, Features, Opts) ->
         end,
     Data = hb_ao:get(<<"data">>, {as, <<"message@1.0">>, MsgWithoutCommitments}, <<>>, Opts),
     Target = hb_ao:get(<<"target">>, {as, <<"message@1.0">>, MsgWithoutCommitments}, <<>>, Opts),
+	
+	% Ethereum addresses are already encoded
+	EncodedOwner = case byte_size(Owner) of
+		42 -> Owner;
+		_ -> hb_util:encode(Owner)
+	end,
     % Set "From" if From-Process is Tag or set with "Owner" address
     From =
         hb_ao:get(
             <<"from-process">>,
             {as, <<"message@1.0">>, MsgWithoutCommitments},
-            hb_util:encode(Owner),
+            EncodedOwner,
             Opts
         ),
     Sig = hb_ao:get(<<"signature">>, {as, <<"message@1.0">>, MsgWithoutCommitments}, <<>>, Opts),
@@ -149,7 +155,7 @@ message_to_json_struct(RawMsg, Features, Opts) ->
         % NOTE: In Arweave TXs, these are called "last_tx"
         <<"Anchor">> => Last,
         % NOTE: When sent to ao "Owner" is the wallet address
-        <<"Owner">> => hb_util:encode(Owner),
+        <<"Owner">> => EncodedOwner,
         <<"From">> => case ?IS_ID(From) of true -> safe_to_id(From); false -> From end,
         <<"Tags">> => prepare_tags(TABM, Opts),
         <<"Target">> => safe_to_id(Target),

@@ -2,7 +2,7 @@
 -export([info/3]).
 -export([info/1, test_func/1, compute/3, init/3, restore/3, snapshot/3, mul/2]).
 -export([update_state/3, increment_counter/3, delay/3]).
--export([index/3, postprocess/3, load/3]).
+-export([index/3, load/3]).
 -include_lib("eunit/include/eunit.hrl").
 -include("include/hb.hrl").
 
@@ -40,7 +40,7 @@ info(_Msg1, _Msg2, _Opts) ->
 			<<"restore">> => <<"Restore function">>,
 			<<"mul">> => <<"Multiply function">>,
 			<<"snapshot">> => <<"Snapshot function">>,
-			<<"postprocess">> => <<"Postprocess function">>,
+			<<"response">> => <<"Response function">>,
 			<<"update_state">> => <<"Update state function">>
 		}
 	},
@@ -120,12 +120,6 @@ mul(Msg1, Msg2) ->
 snapshot(_Msg1, _Msg2, _Opts) ->
     {ok, #{}}.
 
-%% @doc Set the `postprocessor-called' key to true in the HTTP server.
-postprocess(_Msg, #{ <<"body">> := Msgs }, Opts) ->
-    ?event({postprocess_called, Opts}),
-    hb_http_server:set_opts(Opts#{ <<"postprocessor-called">> => true }),
-    {ok, Msgs}.
-
 %% @doc Find a test worker's PID and send it an update message.
 update_state(_Msg, Msg2, _Opts) ->
     case hb_ao:get(<<"test-id">>, Msg2) of
@@ -161,7 +155,7 @@ increment_counter(_Msg1, Msg2, _Opts) ->
     end.
 
 %% @doc Does nothing, just sleeps `Req/duration or 750' ms and returns the 
-%% appropriate form in order to be used as preprocessor.
+%% appropriate form in order to be used as a hook.
 delay(Msg1, Req, Opts) ->
     Duration =
         hb_ao:get_first(

@@ -137,7 +137,19 @@ request(Method, Peer, Path, RawMessage, Opts) ->
             Msg = http_response_to_httpsig(Status, NormHeaderMap, Body, Opts),
             ?event(http_outbound, {result_is_single_key, {key, Key}, {msg, Msg}}, Opts),
             case hb_maps:get(Key, Msg, undefined, Opts) of
-                undefined -> {failure, result_key_not_found};
+                undefined ->
+                    {failure,
+                        <<
+                            "Result key '",
+                            Key/binary,
+                            "' not found in response from '",
+                            Peer/binary,
+                            "' for path '",
+                            Path/binary,
+                            "': ",
+                            Body/binary
+                        >>
+                    };
                 Value -> {BaseStatus, Value}
             end;
         undefined ->
@@ -265,6 +277,11 @@ prepare_request(Format, Method, Peer, Path, RawMessage, Opts) ->
                     ar_bundles:serialize(
                         hb_message:convert(Message, <<"ans104@1.0">>, Opts)
                     )
+            };
+        _ ->
+            ReqBase#{
+                headers => maps:without([<<"body">>], Message),
+                body => maps:get(<<"body">>, Message, <<>>)
             }
     end.
 
@@ -672,6 +689,27 @@ req_to_tabm_singleton(Req, Body, Opts) ->
                     normalize_unsigned(Req, ANS104, Opts);
                 false ->
                     throw({invalid_ans104_signature, Item})
+            end;
+        Codec ->
+            % Assume that the codec stores the encoded message in the `body' field.
+            Decoded =
+                hb_message:convert(
+                    Body,
+                    <<"structured@1.0">>,
+                    Codec,
+                    Opts
+                ),
+            ?event(debug,
+                {verifying_encoded_message,
+                    {body, {string, Body}},
+                    {decoded, Decoded}
+                }
+            ),
+            case hb_message:verify(Decoded, all) of
+                true ->
+                    normalize_unsigned(Req, Decoded, Opts);
+                false ->
+                    throw({invalid_signature, Decoded})
             end
     end.
 
@@ -896,7 +934,7 @@ send_large_signed_request_test() ->
     {ok, [Req]} = file:consult(<<"test/large-message.eterm">>),
     % Get the short trace length from the node message in the large, stored
     % request. 
-    ?event(debug_http, {request_message, Req}),
+    ?event({request_message, Req}),
     ?assertMatch(
         {ok, 5},
         post(
@@ -919,3 +957,53 @@ index_request_test() ->
     URL = hb_http_server:start_node(),
     {ok, Res} = get(URL, <<"/~test-device@1.0/load?name=dogs">>, #{}),
     ?assertEqual(<<"i like dogs!">>, hb_ao:get(<<"body">>, Res, #{})).
+
+send_encoded_node_message_test(Config, Codec) ->
+    NodeURL = hb_http_server:start_node(
+        #{
+            priv_wallet => ar_wallet:new(),
+            operator => <<"unclaimed">>
+        }
+    ),
+    {ok, Res} =
+        post(
+            NodeURL,
+            <<"/~meta@1.0/info">>,
+            #{
+                <<"codec-device">> => Codec,
+                <<"body">> => Config
+            },
+            #{}
+        ),
+    ?event(debug, {res, Res}),
+    ?assertEqual(
+        {ok, <<"b">>},
+        hb_http:get(
+            NodeURL,
+            <<"/~meta@1.0/info/test_optionb">>,
+            #{}
+        )
+    ),
+    ?assertEqual(
+        {ok, <<"c">>},
+        hb_http:get(
+            NodeURL,
+            <<"/~meta@1.0/info/test_deep/c">>,
+            #{}
+        )
+    ).
+
+send_flat_encoded_node_message_test() ->
+    send_encoded_node_message_test(
+        <<"test_option: a\ntest_optionb: b\ntest_deep/c: c">>,
+        <<"flat@1.0">>
+    ).
+
+send_json_encoded_node_message_test() ->
+    send_encoded_node_message_test(
+        <<
+            "{\"test_option\": \"a\", \"test_optionb\": \"b\", \"test_deep\": "
+                "{\"c\": \"c\"}}"
+        >>,
+        <<"json@1.0">>
+    ).

@@ -1,10 +1,10 @@
 %%% @doc A module that helps to render given Key graphs into the .dot files
 -module(hb_cache_render).
 -export([render/1, render/2, cache_path_to_dot/2, cache_path_to_dot/3, dot_to_svg/1]).
--export([get_graph_data/3]).
 % Preparing data for testing
 -export([prepare_unsigned_data/0, prepare_signed_data/0,
     prepare_deeply_nested_complex_message/0]).
+-export([cache_path_to_graph/3, get_graph_data/3]).
 -include("include/hb.hrl").
 
 %% @doc Render the given Key into svg
@@ -221,8 +221,8 @@ get_graph_data(Base, MaxSize, Opts) ->
     NodesMap = maps:get(nodes, Graph, #{}),
     ArcsMap = maps:get(arcs, Graph, #{}),
     % Limit to top `MaxSize` nodes if there are too many
-    NodesList = 
-        case maps:size(NodesMap) > MaxSize of
+    NodesList =
+        case (MaxSize >= 0) and (maps:size(NodesMap) > MaxSize) of
             true ->
                 % Take a subset of nodes
                 {ReducedNodes, _} = lists:split(

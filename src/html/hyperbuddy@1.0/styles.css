@@ -984,3 +984,30 @@ a:hover {
 	text-decoration: none;
 
 }
+
+
+/* Graph visualization styles */
+.graph-link {
+	position: absolute;
+	z-index: 100;
+	top: -18px;
+	right: -18px;
+	background: var(--section-bg-color-primary);
+	border-radius: 5px;
+	border: 0.5px solid var(--border-color);
+	height: 36px;
+	padding: 0px 12px;
+	font-size: clamp(0.6rem, 1.75vw, 0.9rem);
+    font-weight: 500;
+    color: var(--text-color-primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.graph-link:hover {
+	background: var(--section-bg-color-alt1);
+	color: var(--indicator-color-active);
+	text-decoration: none;
+
+}
