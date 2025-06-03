@@ -179,12 +179,20 @@ read(Opts, RawKey) ->
     end.
 
 resolve(Opts, Key) ->
-    Res = resolve(Opts, "", hb_path:term_to_path_parts(hb_store:join(Key), Opts)),
+    PathParts = hb_path:term_to_path_parts(hb_store:join(Key), Opts),
+    Res = resolve(Opts, <<>>, PathParts),
     ?event({resolved, Key, Res}),
     Res.
 
-resolve(_, CurrPath, []) ->
-    hb_store:join(CurrPath);
+resolve(_, Acc, []) -> Acc;
+resolve(Opts, <<>>, [Part|Rest]) ->
+    % First part of path - no need for concatenation
+    case fetch_cache_with_retry(Opts, Part) of
+        {link, Link} ->
+            resolve(Opts, Link, Rest);
+        _ ->
+            resolve(Opts, Part, Rest)
+    end;
 resolve(Opts, CurrPath, [Next|Rest]) ->
     PathPart = hb_store:join([CurrPath, Next]),
     ?event(
