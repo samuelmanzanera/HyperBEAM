@@ -162,7 +162,7 @@ read(Opts, RawKey) ->
                 no_store ->
                     not_found;
                 PersistentStore ->
-                    ResolvedKey = hb_store:resolve(PersistentStore, Key),
+                    ResolvedKey = hb_store:resolve(PersistentStore, RawKey),
                     hb_store:read(PersistentStore, ResolvedKey)
             end;
         {raw, Entry = #{value := Value}} ->
@@ -235,8 +235,9 @@ make_link(Opts, RawExisting, New) ->
 
 %% @doc List all the keys registered.
 list(Opts, Path) ->
+    ResolvedPath = resolve(Opts, Path),
     InMemoryKeys =
-        case fetch_cache_with_retry(Opts, Path) of
+        case fetch_cache_with_retry(Opts, ResolvedPath) of
             {group, Set} ->
                 sets:to_list(Set);
             {link, Link} ->
@@ -252,7 +253,7 @@ list(Opts, Path) ->
         no_store ->
             {ok, InMemoryKeys};
         Store ->
-            ResolvedPath = hb_store:resolve(Store, Path),
+            ResolvedPath = hb_store:resolve(Opts, Path),
             PersistentKeys =
                 lists:map(
                     fun hb_util:bin/1,
@@ -267,7 +268,8 @@ list(Opts, Path) ->
 
 %% @doc Determine the type of a key in the store.
 type(Opts, Key) ->
-    case fetch_cache_with_retry(Opts, Key) of
+    ResolvedKey = resolve(Opts, Key),
+    case fetch_cache_with_retry(Opts, ResolvedKey) of
         nil ->
             case get_persistent_store(Opts) of
                 no_store ->
