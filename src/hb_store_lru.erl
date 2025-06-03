@@ -25,10 +25,6 @@
 %%% options.
 -define(DEFAULT_LRU_CAPACITY, 4_000_000_000).
 
-%% @doc Maximum number of retries when fetching cache entries that aren't
-%% immediately found due to timing issues in concurrent operations.
--define(RETRY_THRESHOLD, 2).
-
 %% @doc Start the LRU cache.
 start(StoreOpts = #{ <<"name">> := Name }) ->
     ?event(cache_lru, {starting_lru_server, Name}),
@@ -331,7 +327,14 @@ get_cache_entry(Table, Key) ->
     end.
 
 fetch_cache_with_retry(Opts, Key) ->
-    fetch_cache_with_retry(Opts, Key, 1).
+    #{<<"cache-table">> := Table, <<"pid">> := Server} = hb_store:find(Opts),
+    case get_cache_entry(Table, Key) of
+        nil ->
+            sync(Server),
+            get_cache_entry(Table, Key);
+        Entry ->
+            Entry
+    end.
 
 fetch_cache_with_retry(Opts, Key, Retries) ->
     #{<<"cache-table">> := Table, <<"pid">> := Server} = hb_store:find(Opts),
