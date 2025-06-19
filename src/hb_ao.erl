@@ -510,7 +510,7 @@ resolve_stage(6, Func, Msg1, Msg2, ExecName, Opts) ->
 	% Execution.
 	% First, determine the arguments to pass to the function.
 	% While calculating the arguments we unset the add_key option.
-	UserOpts1 = hb_maps:remove(trace, hb_maps:without(?TEMP_OPTS, Opts, Opts), Opts),
+	UserOpts1 = hb_maps:without(?TEMP_OPTS, Opts, Opts),
     % Unless the user has explicitly requested recursive spawning, we
     % unset the spawn_worker option so that we do not spawn a new worker
     % for every resulting execution.
