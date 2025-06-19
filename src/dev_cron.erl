@@ -98,6 +98,7 @@ every(_Msg1, Msg2, Opts) ->
                     ),
 				Name = {<<"cron@1.0">>, ReqMsgID},
 				hb_name:register(Name, Pid),
+				Pid ! tick,
 				{ok, ReqMsgID}
 			catch
 				error:{invalid_time_unit, Unit} ->
@@ -138,22 +139,25 @@ stop(_Msg1, Msg2, Opts) ->
 	end.
 
 every_worker_loop(CronPath, Req, Opts, IntervalMillis) ->
-    Req1 = Req#{<<"path">> => CronPath},
-    ?event({cron_every_worker_executing,
-            {path, CronPath},
-            {req_id, hb_message:id(Req, all, Opts)}}),
-    try
-        dev_meta:handle(Opts, Req1),
-        ?event({cron_every_worker_executed, {path, CronPath}})
-    catch
-        error:badarg ->
-            exit(normal);
-        Class:Reason:Stack ->
-            ?event({cron_every_worker_error,
+    receive 
+        tick ->
+            Req1 = Req#{<<"path">> => CronPath},
+            ?event({cron_every_worker_executing,
                     {path, CronPath},
-                    {error, Class, Reason, Stack}})
+                    {req_id, hb_message:id(Req, all, Opts)}}),
+            try
+                dev_meta:handle(Opts, Req1),
+                ?event({cron_every_worker_executed, {path, CronPath}})
+            catch
+                error:badarg ->
+                    exit(normal);
+                Class:Reason:Stack ->
+                    ?event({cron_every_worker_error,
+                            {path, CronPath},
+                            {error, Class, Reason, Stack}})
+            end,
+            erlang:send_after(IntervalMillis, self(), tick)
     end,
-    timer:sleep(max(IntervalMillis, 10)),
     every_worker_loop(CronPath, Req, Opts, IntervalMillis).
 
 %% @doc Parse a time string into milliseconds.
