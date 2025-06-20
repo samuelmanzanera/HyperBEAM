@@ -97,7 +97,7 @@ normalize(Msg, Mode, Opts) when is_map(Msg) ->
                         % anything.
                         {Key, V}
                     end,
-                    maps:to_list(maps:without([<<"commitments">>, <<"priv">>], Msg))
+                    maps:to_list(maps:without([<<"priv">>], Msg))
                 )
             )
     );

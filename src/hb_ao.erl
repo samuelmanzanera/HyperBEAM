@@ -345,8 +345,11 @@ resolve_stage(1, RawMsg1, RawMsg2, Opts) ->
     % keys to resolve.
     ?event(ao_core, {stage, 1, normalize}, Opts),
     Msg1 = normalize_keys(RawMsg1, Opts),
-    Msg2 = normalize_keys(RawMsg2, Opts),
-    resolve_stage(2, Msg1, Msg2, Opts);
+    NormMsg2 = normalize_keys(RawMsg2, Opts),
+    NormCommitmentsMsg2 = hb_message:normalize_commitments(NormMsg2, Opts),
+    LinkfiedMsg = maps:without([<<"commitments">>], hb_message:convert(NormCommitmentsMsg2, tabm, Opts)),
+    ?event(x, {linkified_msg, LinkfiedMsg}),
+    resolve_stage(2, Msg1, LinkfiedMsg, Opts);
 resolve_stage(2, Msg1, Msg2, Opts) ->
     ?event(ao_core, {stage, 2, cache_lookup}, Opts),
     % Lookup request in the cache. If we find a result, return it.
@@ -1269,6 +1272,9 @@ is_exported(_Info, _Key, _Opts) -> true.
 %% @doc Convert a key to a binary in normalized form.
 normalize_key(Key) -> normalize_key(Key, #{}).
 normalize_key(Key, _Opts) when ?IS_ID(Key) -> Key;
+normalize_key(Key, _Opts) when ?IS_LINK(Key) ->
+    {link, ID, _LinkOpts} = Key,
+    ID;
 normalize_key(Key, _Opts) when is_binary(Key) ->
     hb_util:to_lower(Key);
 normalize_key(Key, _Opts) when is_atom(Key) -> atom_to_binary(Key);
